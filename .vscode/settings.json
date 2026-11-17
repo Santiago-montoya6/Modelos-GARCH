@@ -1,0 +1,9 @@
+{
+  "r.rterm.option": ["--no-save", "--no-restore"],
+  "r.plot.useHttpgd": false,
+  "r.sessionWatcher": true,
+  "r.bracketedPaste": true,
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "[r]": { "editor.tabSize": 2 }
+}

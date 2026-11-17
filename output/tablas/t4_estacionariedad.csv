@@ -1,0 +1,12 @@
+"condicion","valor"
+"alpha + beta (segundo orden: < 1)",0.994478204580747
+"E[ln(beta + alpha z^2)] (estricta: < 0)",-0.0411564983216459
+"(alpha+beta)^2 + (E z^4 - 1) alpha^2 (cuarto momento: < 1)",1.16528703661903
+"Vida media de un choque (días)",125.18241867901
+"Varianza incondicional diaria (%^2)",4.02887492048949
+"Volatilidad incondicional anualizada (%)",31.8634034585659
+"Volatilidad muestral anualizada (%)",17.9010995136162
+"EE robusto de alpha + beta",0.0111716976076502
+"IC 95% alpha + beta (inf)",0.972581677269753
+"IC 95% alpha + beta (sup)",1.01637473189174
+"z para H0: alpha + beta = 1",-0.494266459152238

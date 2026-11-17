@@ -1,0 +1,62 @@
+{
+ "eq_modelo": [
+  1546,
+  150
+ ],
+ "eq_condicional": [
+  1524,
+  126
+ ],
+ "eq_arch": [
+  760,
+  281
+ ],
+ "eq_garch": [
+  1250,
+  292
+ ],
+ "eq_archinf": [
+  1096,
+  245
+ ],
+ "eq_arma": [
+  1308,
+  133
+ ],
+ "eq_garch11": [
+  937,
+  133
+ ],
+ "eq_segundo": [
+  392,
+  108
+ ],
+ "eq_estricta": [
+  702,
+  134
+ ],
+ "eq_cuarto": [
+  994,
+  126
+ ],
+ "eq_varinc": [
+  601,
+  199
+ ],
+ "eq_vidamedia": [
+  657,
+  225
+ ],
+ "eq_pronostico": [
+  1420,
+  137
+ ],
+ "eq_var": [
+  929,
+  117
+ ],
+ "eq_jensen": [
+  975,
+  126
+ ]
+}

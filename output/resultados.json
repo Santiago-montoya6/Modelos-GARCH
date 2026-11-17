@@ -1,0 +1,127 @@
+{
+  "periodo": ["2015-01-05", "2025-12-30"],
+  "n": 2764,
+  "descriptivos": {
+    "n": 2764,
+    "Media (%)": 0.04367741,
+    "Desv. estándar (%)": 1.12766327,
+    "Mínimo (%)": -11.58865312,
+    "Máximo (%)": 9.98628134,
+    "Asimetría": -0.5822519,
+    "Curtosis": 17.32787729,
+    "Jarque-Bera": 23840.10526101,
+    "p-valor JB": 0,
+    "Ljung-Box Q(10) r": 199.07828278,
+    "p-valor": 0,
+    "Ljung-Box Q(10) r^2": 2906.17442312,
+    "p-valor.1": 0,
+    "ARCH-LM(12)": 839.304822,
+    "p-valor.2": 6.13386075e-172
+  },
+  "modelo": "GARCH(1,1) con innovaciones t-Student, media constante",
+  "coeficientes": {
+    "mu": 0.09472902,
+    "omega": 0.02224662,
+    "alpha1": 0.17293473,
+    "beta1": 0.82154347,
+    "shape": 5.54041289
+  },
+  "persistencia": 0.9944782,
+  "ee_persistencia": 0.0111717,
+  "ic95_persistencia": [0.97258168, 1.01637473],
+  "z_igarch": -0.49426646,
+  "vida_media_dias": 125.18241868,
+  "var_incondicional": 4.02887492,
+  "vol_anual_incondicional": 31.86340346,
+  "estricta_E_log": -0.0411565,
+  "cuarto_momento": 1.16528704,
+  "sigma_ultimo": 0.60991083,
+  "sigma_pronostico_h1": 0.57964715,
+  "sigma_pronostico_h250": 1.7602984,
+  "vol_anual_muestral": 17.90109951,
+  "variance_targeting": {
+    "mu": 0.09472592,
+    "alpha1": 0.15801835,
+    "beta1": 0.82340167,
+    "shape": 5.92056574,
+    "omega": 0.02366663
+  },
+  "seleccion": [
+    {
+      "modelo": "GARCH(1,1)",
+      "distribucion": "t-Student",
+      "logverosimilitud": -3478.62333456,
+      "AIC": 2.52071153,
+      "BIC": 2.53142867
+    },
+    {
+      "modelo": "GARCH(1,2)",
+      "distribucion": "t-Student",
+      "logverosimilitud": -3478.54459298,
+      "AIC": 2.52137814,
+      "BIC": 2.53423871
+    },
+    {
+      "modelo": "GARCH(2,1)",
+      "distribucion": "t-Student",
+      "logverosimilitud": -3478.78820101,
+      "AIC": 2.52155441,
+      "BIC": 2.53441498
+    },
+    {
+      "modelo": "GARCH(2,2)",
+      "distribucion": "t-Student",
+      "logverosimilitud": -3478.48820032,
+      "AIC": 2.52206093,
+      "BIC": 2.53706492
+    },
+    {
+      "modelo": "GARCH(1,1)",
+      "distribucion": "Normal",
+      "logverosimilitud": -3574.97590608,
+      "AIC": 2.5897076,
+      "BIC": 2.59828131
+    },
+    {
+      "modelo": "GARCH(1,2)",
+      "distribucion": "Normal",
+      "logverosimilitud": -3574.90129249,
+      "AIC": 2.5903772,
+      "BIC": 2.60109434
+    },
+    {
+      "modelo": "GARCH(2,1)",
+      "distribucion": "Normal",
+      "logverosimilitud": -3574.9036484,
+      "AIC": 2.59037891,
+      "BIC": 2.60109604
+    },
+    {
+      "modelo": "GARCH(2,2)",
+      "distribucion": "Normal",
+      "logverosimilitud": -3574.90130726,
+      "AIC": 2.5911008,
+      "BIC": 2.60396137
+    }
+  ],
+  "backtesting": [
+    {
+      "nivel": "1%",
+      "esperadas": 5,
+      "observadas": 9,
+      "kupiec_LR": 2.61257062,
+      "kupiec_p": 0.10601978,
+      "christoffersen_LR": 2.94320146,
+      "christoffersen_p": 0.22955773
+    },
+    {
+      "nivel": "5%",
+      "esperadas": 25,
+      "observadas": 36,
+      "kupiec_LR": 4.5110305,
+      "kupiec_p": 0.03367695,
+      "christoffersen_LR": 4.68233927,
+      "christoffersen_p": 0.09621504
+    }
+  ]
+}

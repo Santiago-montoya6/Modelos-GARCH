@@ -1,0 +1,489 @@
+// Genera Presentacion_GARCH.pptx a partir de los resultados del análisis.
+// Ejecutar desde garch_spx/presentacion:  node crear_presentacion.js
+const pptxgen = require("pptxgenjs");
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
+const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js");
+
+const ROOT = path.resolve(__dirname, "..");
+const FIG = (f) => path.join(ROOT, "output/figuras", f);
+const EQ = (f) => path.join(__dirname, "ecuaciones", f + ".png");
+const res = JSON.parse(fs.readFileSync(path.join(ROOT, "output/resultados.json")));
+const eqDims = JSON.parse(fs.readFileSync(path.join(__dirname, "ecuaciones/dims.json")));
+const csv = (f) => {
+  const [h, ...rows] = fs.readFileSync(path.join(ROOT, f), "utf8").trim().split("\n");
+  const k = h.split(",").map((s) => s.replace(/"/g, ""));
+  const split = (r) => r.match(/("[^"]*"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g).map((v) => v.replace(/"/g, ""));
+  return rows.map((r) => Object.fromEntries(split(r).map((v, i) => [k[i], v])));
+};
+const fmt = (x, d = 3) => Number(x).toFixed(d).replace(".", ",").replace("-", "−");
+
+const THEME = {
+  name: "GARCH minimal",
+  headFontFace: "Cambria",
+  bodyFontFace: "Calibri",
+  colors: {
+    dk1: "1E1E1E", lt1: "FFFFFF", dk2: "1F3A5F", lt2: "F3F5F8",
+    accent1: "C8553D", accent2: "1F3A5F", accent3: "8A8F98", accent4: "7A9CC6",
+    accent5: "2E7D5B", accent6: "E8B04B", hlink: "1F3A5F", folHlink: "6B4E8A",
+  },
+};
+const HEX = THEME.colors;
+
+(async () => {
+  const pres = new pptxgen();
+  pres.layout = "LAYOUT_WIDE"; // 13,33 x 7,5 in
+  pres.title = "Modelos GARCH: volatilidad condicional y riesgo del S&P 500";
+  pres.author = "Rafael Alexander Riatiga Durán y Santiago Montoya Vanegas";
+  pres.subject = "Seminario de Series de Tiempo I";
+  pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
+  const C = pres.SchemeColor;
+
+  // ---------- Layouts ----------
+  pres.defineSlideMaster({
+    title: "CONTENIDO",
+    background: { color: "FFFFFF" },
+    margin: [0.4, 0.6, 0.6, 0.6],
+    objects: [
+      { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.35, w: 12.1, h: 0.85,
+          fontFace: THEME.headFontFace, fontSize: 30, bold: true, color: C.text2, valign: "middle", margin: 0 },
+        text: "" } },
+      { text: { text: "Modelos GARCH · Seminario de Series de Tiempo I",
+          options: { x: 0.6, y: 7.0, w: 7, h: 0.3, fontSize: 10, color: C.accent3, margin: 0 } } },
+    ],
+    slideNumber: { x: 12.1, y: 7.0, w: 0.6, h: 0.3, fontSize: 10, color: C.accent3, align: "right" },
+  });
+  pres.defineSlideMaster({ title: "PORTADA", background: { color: "FFFFFF" } });
+
+  // ---------- Utilidades ----------
+  const dims = async (f) => { const m = await sharp(f).metadata(); return [m.width, m.height]; };
+  const img = async (s, f, o) => {
+    const [w, h] = await dims(f);
+    let W = o.w, H = o.h;
+    if (W && !H) H = (W * h) / w;
+    if (H && !W) W = (H * w) / h;
+    if (W && H && o.fit) { const r = Math.min(W / w, H / h); W = w * r; H = h * r; }
+    const x = o.cx !== undefined ? o.cx - W / 2 : o.x;
+    s.addImage({ path: f, x, y: o.y, w: W, h: H, altText: o.alt, objectName: o.name || path.basename(f) });
+    return { x, y: o.y, w: W, h: H };
+  };
+  // Ecuación: escala 1 = tamaño natural de 10 pt
+  const eq = (s, k, o) => {
+    const [pw, ph] = eqDims[k]; const sc = o.scale || 2.2;
+    const W = (pw / 600) * sc, H = (ph / 600) * sc;
+    const x = o.cx !== undefined ? o.cx - W / 2 : o.x;
+    s.addImage({ path: EQ(k), x, y: o.y, w: W, h: H, altText: o.alt || "Ecuación", objectName: k });
+    return { x, y: o.y, w: W, h: H };
+  };
+  const txt = (s, t, o) => s.addText(t, { isTextBox: true, margin: 0, fontSize: 16, color: C.text1, valign: "top", ...o });
+  const card = (s, o) => s.addShape(pres.shapes.ROUNDED_RECTANGLE, {
+    x: o.x, y: o.y, w: o.w, h: o.h, rectRadius: 0.08, fill: { color: C.background2 },
+    line: { color: C.background2 }, objectName: o.name || "tarjeta" });
+  const circulo = (s, n, x, y, d = 0.5, color = C.accent2) => {
+    s.addShape(pres.shapes.OVAL, { x, y, w: d, h: d, fill: { color }, line: { color }, objectName: "num" + n });
+    txt(s, String(n), { x, y, w: d, h: d, fontSize: 16, bold: true, color: C.background1, align: "center", valign: "middle" });
+  };
+  const stat = (s, valor, etiqueta, o) => {
+    card(s, o);
+    txt(s, valor, { x: o.x + 0.2, y: o.y + 0.15, w: o.w - 0.4, h: o.h * 0.55, fontSize: o.fs || 32, bold: true,
+                    color: o.color || C.text2, fontFace: THEME.headFontFace, valign: "middle" });
+    txt(s, etiqueta, { x: o.x + 0.2, y: o.y + o.h * 0.6, w: o.w - 0.4, h: o.h * 0.35, fontSize: 13, color: C.accent3 });
+  };
+  const nueva = (titulo, seccion) => {
+    const s = pres.addSlide({ masterName: "CONTENIDO", sectionTitle: seccion });
+    s.addText(titulo, { placeholder: "title" });
+    return s;
+  };
+
+  const t3 = Object.fromEntries(csv("output/tablas/t3_estimacion_garch11_t.csv").map((r) => [r.parametro, r]));
+  const t2 = csv("output/tablas/t2_seleccion_modelos.csv");
+  const t4b = csv("output/tablas/t4b_sensibilidad_variance_targeting.csv");
+  const t5 = csv("output/tablas/t5_diagnostico.csv");
+  const t6 = csv("output/tablas/t6_pronostico_volatilidad.csv");
+  const t7 = csv("output/tablas/t7_backtesting_var.csv");
+  const sig = csv("presentacion/img/sigma.csv");
+  const pv = (p) => (Number(p) < 0.001 ? "< 0,001" : fmt(p, 3));
+  const a = res.coeficientes.alpha1, b = res.coeficientes.beta1, nu = res.coeficientes.shape;
+
+  // ========== SECCIÓN: Motivación y teoría ==========
+  pres.addSection({ title: "Motivación y teoría" });
+
+  // 1. Portada
+  {
+    const s = pres.addSlide({ masterName: "PORTADA", sectionTitle: "Motivación y teoría" });
+    await img(s, path.join(ROOT, "escrito/escudo.jpg"), { x: 0.7, y: 0.5, h: 1.25, alt: "Escudo de la Universidad de Antioquia", name: "escudo" });
+    txt(s, "Universidad de Antioquia · Facultad de Ciencias Exactas y Naturales\nSeminario de Series de Tiempo I",
+        { x: 2.0, y: 0.75, w: 9, h: 0.8, fontSize: 14, color: C.accent3, valign: "middle" });
+    txt(s, "Modelos GARCH", { x: 0.7, y: 2.1, w: 12, h: 1.1, fontSize: 54, bold: true, color: C.text2, fontFace: THEME.headFontFace });
+    txt(s, "Volatilidad condicional, estacionariedad y una aplicación al riesgo del S&P 500",
+        { x: 0.7, y: 3.2, w: 11.5, h: 0.6, fontSize: 22, color: C.text1 });
+    txt(s, "Rafael Alexander Riatiga Durán   ·   Santiago Montoya Vanegas",
+        { x: 0.7, y: 4.0, w: 11.5, h: 0.45, fontSize: 18, color: C.accent3 });
+    s.addChart(pres.charts.LINE, [{ name: "σ", labels: sig.map((r) => r.fecha.slice(0, 4)), values: sig.map((r) => Number(r.sigma)) }], {
+      x: 0.5, y: 4.75, w: 12.3, h: 2.35, chartColors: [HEX.accent1], lineSize: 1.25, lineDataSymbol: "none",
+      showLegend: false, showTitle: false, catAxisHidden: true, valAxisHidden: true,
+      valGridLine: { style: "none" }, catGridLine: { style: "none" }, objectName: "volatilidad_decorativa",
+      altText: "Volatilidad condicional estimada del S&P 500, 2015 a 2025",
+    });
+    txt(s, "σₜ estimada del S&P 500, 2015–2025", { x: 0.7, y: 7.0, w: 6, h: 0.3, fontSize: 10, color: C.accent3 });
+  }
+
+  // 2. Motivación
+  {
+    const s = nueva("Los rendimientos casi no se predicen, pero su volatilidad sí", "Motivación y teoría");
+    await img(s, FIG("f1_precio_rendimientos.png"), { x: 0.6, y: 1.4, h: 5.45, alt: "Precio y rendimientos diarios del SPY" });
+    const x = 8.45, w = 4.25;
+    stat(s, "17,3", "curtosis de los rendimientos (normal = 3)", { x, y: 1.5, w, h: 1.55 });
+    stat(s, "−11,6 %", "peor día: 16 de marzo de 2020", { x, y: 3.25, w, h: 1.55, color: C.accent1 });
+    stat(s, "2 764", "rendimientos diarios, 2015–2025", { x, y: 5.0, w, h: 1.55 });
+  }
+
+  // 3. Hechos estilizados
+  {
+    const s = nueva("Incorrelacionados, pero no independientes", "Motivación y teoría");
+    await img(s, FIG("f2_fac_r_r2.png"), { cx: 6.67, y: 1.35, w: 11.0, alt: "FAC de los rendimientos y de sus cuadrados" });
+    card(s, { x: 0.6, y: 6.1, w: 12.1, h: 0.75 });
+    txt(s, [
+      { text: "Ljung-Box Q(10):  ", options: { bold: true } },
+      { text: `rₜ → ${fmt(res.descriptivos["Ljung-Box Q(10) r"], 0)}   ·   rₜ² → ${fmt(res.descriptivos["Ljung-Box Q(10) r^2"], 0)}      ` },
+      { text: "ARCH-LM(12):  ", options: { bold: true } },
+      { text: "p < 0,001   →   la varianza depende del pasado" },
+    ], { x: 0.85, y: 6.1, w: 11.7, h: 0.75, valign: "middle", fontSize: 16 });
+  }
+
+  // 4. Varianza condicional
+  {
+    const s = nueva("La varianza condicional cambia en el tiempo", "Motivación y teoría");
+    eq(s, "eq_modelo", { cx: 6.67, y: 1.55, scale: 2.6 });
+    eq(s, "eq_condicional", { cx: 6.67, y: 2.45, scale: 2.6 });
+    const items = [
+      ["Media condicional nula", "εₜ es una diferencia de martingala: los rendimientos quedan incorrelacionados, como en los datos."],
+      ["Varianza condicional σₜ²", "Se conoce en t − 1 y depende del pasado: εₜ² sí se autocorrelaciona."],
+      ["Colas pesadas", "Mezclar varianzas distintas produce más curtosis que la de zₜ, aun si zₜ es normal."],
+    ];
+    items.forEach(([h, d], i) => {
+      const x = 0.6 + i * 4.1;
+      card(s, { x, y: 3.55, w: 3.9, h: 3.1 });
+      circulo(s, i + 1, x + 0.3, 3.8);
+      txt(s, h, { x: x + 0.3, y: 4.5, w: 3.3, h: 0.5, fontSize: 18, bold: true, color: C.text2 });
+      txt(s, d, { x: x + 0.3, y: 5.05, w: 3.3, h: 1.5, fontSize: 15 });
+    });
+  }
+
+  // 5. De ARCH a GARCH
+  {
+    const s = nueva("De ARCH a GARCH: añadir memoria a la varianza", "Motivación y teoría");
+    card(s, { x: 0.6, y: 1.45, w: 5.2, h: 2.75 });
+    txt(s, "ARCH(q) · Engle (1982)", { x: 0.9, y: 1.6, w: 4.6, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+    eq(s, "eq_arch", { cx: 3.2, y: 2.15, scale: 2.0 });
+    txt(s, "Un choque grande eleva la varianza siguiente, pero reproducir la persistencia exige q grande.",
+        { x: 0.9, y: 3.2, w: 4.6, h: 0.9, fontSize: 14 });
+    card(s, { x: 6.1, y: 1.45, w: 6.6, h: 2.75 });
+    txt(s, "GARCH(p, q) · Bollerslev (1986)", { x: 6.4, y: 1.6, w: 6, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+    eq(s, "eq_garch", { cx: 9.4, y: 2.15, scale: 2.0 });
+    txt(s, "Los rezagos de la propia varianza resumen esa memoria con pocos parámetros. ω > 0, αᵢ, βⱼ ≥ 0.",
+        { x: 6.4, y: 3.2, w: 6.0, h: 0.9, fontSize: 14 });
+    txt(s, "Dos lecturas del GARCH(1,1)", { x: 0.6, y: 4.5, w: 12, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+    eq(s, "eq_archinf", { x: 0.8, y: 5.1, scale: 2.0 });
+    txt(s, "ARCH(∞) con pesos geométricos", { x: 0.8, y: 6.05, w: 5, h: 0.4, fontSize: 14, color: C.accent3 });
+    eq(s, "eq_arma", { x: 7.0, y: 5.25, scale: 2.0 });
+    txt(s, "εₜ² es un ARMA(1,1): la FAC de los cuadrados decae", { x: 7.0, y: 6.05, w: 5.7, h: 0.4, fontSize: 14, color: C.accent3 });
+  }
+
+  // 6. Interpretación de parámetros
+  {
+    const s = nueva("Qué significa cada parámetro", "Motivación y teoría");
+    eq(s, "eq_garch11", { cx: 6.67, y: 1.45, scale: 2.8 });
+    const P = [
+      ["α", "Reacción", "Cuánto pasa la sorpresa de hoy, εₜ₋₁², a la varianza de mañana. α alto: volatilidad nerviosa, con picos."],
+      ["β", "Memoria", "Qué fracción de la varianza de ayer se conserva. β alto: volatilidad suave que decae lento."],
+      ["α + β", "Persistencia", "Tasa a la que se disipa un choque sobre la varianza esperada."],
+      ["ω", "Nivel", "Con la persistencia fija la varianza de largo plazo."],
+    ];
+    P.forEach(([sym, h, d], i) => {
+      const x = 0.6 + i * 3.075, y = 2.55, w = 2.9;
+      card(s, { x, y, w, h: 4.25 });
+      txt(s, sym, { x: x + 0.25, y: y + 0.2, w: w - 0.5, h: 0.7, fontSize: 30, bold: true, color: C.accent1, fontFace: THEME.headFontFace });
+      txt(s, h, { x: x + 0.25, y: y + 0.95, w: w - 0.5, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+      txt(s, d, { x: x + 0.25, y: y + 1.45, w: w - 0.5, h: 1.6, fontSize: 14 });
+    });
+    eq(s, "eq_vidamedia", { cx: 0.6 + 2 * 3.075 + 1.45, y: 5.75, scale: 1.55 });
+    eq(s, "eq_varinc", { cx: 0.6 + 3 * 3.075 + 1.45, y: 5.75, scale: 1.55 });
+  }
+
+  // 7. Estacionariedad
+  {
+    const s = nueva("Condiciones de estacionariedad", "Motivación y teoría");
+    const cols = [
+      ["Segundo orden", "eq_segundo", "Bollerslev (1986)", "Varianza finita y constante: σ² = ω / (1 − α − β). Es la que permite hablar de un nivel de largo plazo."],
+      ["Estricta", "eq_estricta", "Nelson (1990)", "Más débil: por Jensen, E ln(β + αz²) ≤ ln(α + β). Un IGARCH (α + β = 1) es estrictamente estacionario con varianza infinita."],
+      ["Cuarto momento", "eq_cuarto", "κz = E zₜ⁴", "Curtosis finita. Si se cumple, la curtosis de εₜ supera a la de zₜ: el modelo genera colas pesadas."],
+    ];
+    cols.forEach(([h, k, ref, d], i) => {
+      const x = 0.6 + i * 4.1, w = 3.9;
+      card(s, { x, y: 1.45, w, h: 4.6 });
+      circulo(s, i + 1, x + 0.3, 1.7);
+      txt(s, h, { x: x + 0.95, y: 1.7, w: w - 1.2, h: 0.5, fontSize: 19, bold: true, color: C.text2, valign: "middle" });
+      eq(s, k, { cx: x + w / 2, y: 2.55, scale: k === "eq_segundo" ? 2.6 : 1.85 });
+      txt(s, ref, { x: x + 0.3, y: 3.25, w: w - 0.6, h: 0.4, fontSize: 13, color: C.accent3, italic: true });
+      txt(s, d, { x: x + 0.3, y: 3.7, w: w - 0.6, h: 2.2, fontSize: 15 });
+    });
+    txt(s, [
+      { text: "Positividad: ", options: { bold: true, color: C.text2 } },
+      { text: "ω > 0, α ≥ 0, β ≥ 0.   " },
+      { text: "Orden de exigencia: ", options: { bold: true, color: C.text2 } },
+      { text: "cuarto momento ⇒ segundo orden ⇒ estricta." },
+    ], { x: 0.6, y: 6.3, w: 12.1, h: 0.5, fontSize: 16 });
+  }
+
+  // 8. Pronóstico
+  {
+    const s = nueva("El pronóstico vuelve a la media a la tasa α + β", "Motivación y teoría");
+    eq(s, "eq_pronostico", { cx: 6.67, y: 1.45, scale: 2.5 });
+    const K = Array.from({ length: 51 }, (_, i) => i * 5);
+    const serie = (p) => K.map((k) => Math.pow(p, k));
+    s.addChart(pres.charts.LINE, [
+      { name: "α+β = 0,90", labels: K.map(String), values: serie(0.9) },
+      { name: "α+β = 0,97", labels: K.map(String), values: serie(0.97) },
+      { name: `α+β = ${fmt(res.persistencia, 4)} (S&P 500)`, labels: K.map(String), values: serie(res.persistencia) },
+    ], {
+      x: 0.6, y: 2.3, w: 8.2, h: 4.5, chartColors: [HEX.accent4, HEX.accent3, HEX.accent1], lineSize: 2.25, lineDataSymbol: "none",
+      showLegend: true, legendPos: "t", legendFontSize: 12, legendFontFace: "+mn-lt", legendColor: HEX.dk1,
+      showTitle: true, title: "Fracción del choque que sigue presente a k días", titleFontSize: 14, titleFontFace: "+mn-lt", titleColor: HEX.dk1,
+      catAxisLabelFontSize: 11, valAxisLabelFontSize: 11, catAxisLabelFontFace: "+mn-lt", valAxisLabelFontFace: "+mn-lt",
+      catAxisLabelColor: HEX.accent3, valAxisLabelColor: HEX.accent3, catAxisLabelFrequency: 10,
+      valAxisMinVal: 0, valAxisMaxVal: 1, valAxisLabelFormatCode: "0.0", valGridLine: { color: "E5E7EB", size: 0.5 },
+      catGridLine: { style: "none" }, showCatAxisTitle: true, catAxisTitle: "k (días)", catAxisTitleFontSize: 12, catAxisTitleColor: HEX.accent3,
+      objectName: "grafico_persistencia", altText: "Decaimiento de (alfa+beta) a la k para tres persistencias",
+    });
+    txt(s, "Vida media de un choque", { x: 9.2, y: 2.4, w: 3.5, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+    [["0,90", "6,6 días", C.accent4], ["0,97", "22,8 días", C.accent3], [fmt(res.persistencia, 4), `${fmt(res.vida_media_dias, 0)} días`, C.accent1]].forEach(([p, v, col], i) => {
+      card(s, { x: 9.2, y: 3.0 + i * 1.2, w: 3.5, h: 1.0 });
+      txt(s, v, { x: 9.4, y: 3.05 + i * 1.2, w: 3.1, h: 0.55, fontSize: 24, bold: true, color: col, fontFace: THEME.headFontFace, valign: "middle" });
+      txt(s, `α + β = ${p}`, { x: 9.4, y: 3.58 + i * 1.2, w: 3.1, h: 0.35, fontSize: 13, color: C.accent3 });
+    });
+    txt(s, "Cerca de 1, el nivel de largo plazo tarda meses en alcanzarse.", { x: 9.2, y: 6.6, w: 3.5, h: 0.35, fontSize: 12, color: C.accent3 });
+  }
+
+  // ========== SECCIÓN: Aplicación ==========
+  pres.addSection({ title: "Aplicación" });
+
+  // 9. Datos y metodología
+  {
+    const s = nueva("Aplicación: rendimientos diarios del S&P 500", "Aplicación");
+    txt(s, [
+      { text: "Datos: ", options: { bold: true, color: C.text2 } },
+      { text: "ETF SPY (réplica del índice), cierres diarios de enero de 2015 a diciembre de 2025.\nrₜ = 100 · ln(Pₜ / Pₜ₋₁),   n = 2 764 rendimientos." },
+    ], { x: 0.6, y: 1.4, w: 12.1, h: 0.8, fontSize: 17 });
+    const pasos = [
+      ["Identificación", "FAC de r y r², Jarque-Bera, Ljung-Box, ARCH-LM"],
+      ["Selección", "GARCH(p,q), p,q ≤ 2; normal vs t; AIC y BIC"],
+      ["Estimación", "Máxima verosimilitud, EE robustos, condiciones de estacionariedad"],
+      ["Diagnóstico", "Residuales estandarizados: Ljung-Box, ARCH-LM, sesgo de signo"],
+      ["Pronóstico y uso", "σ a 250 días; VaR fuera de muestra con backtesting"],
+    ];
+    pasos.forEach(([h, d], i) => {
+      const x = 0.6 + i * 2.48, w = 2.3;
+      card(s, { x, y: 2.6, w, h: 3.3 });
+      circulo(s, i + 1, x + 0.25, 2.85, 0.55, i === 4 ? C.accent1 : C.accent2);
+      txt(s, h, { x: x + 0.25, y: 3.6, w: w - 0.4, h: 0.5, fontSize: 17, bold: true, color: C.text2 });
+      txt(s, d, { x: x + 0.25, y: 4.15, w: w - 0.4, h: 1.6, fontSize: 14 });
+      if (i < 4) s.addShape(pres.shapes.CHEVRON, { x: x + w + 0.03, y: 4.1, w: 0.13, h: 0.3,
+        fill: { color: C.accent3 }, line: { color: C.accent3 }, objectName: "flecha" + i });
+    });
+    txt(s, "Herramientas: R con el paquete rugarch (estimación, pronóstico y backtesting); tseries y FinTS para las pruebas. Código reproducible.",
+        { x: 0.6, y: 6.25, w: 12.1, h: 0.5, fontSize: 14, color: C.accent3 });
+  }
+
+  // 10. Selección
+  {
+    const s = nueva("El GARCH(1,1) con t de Student es suficiente", "Aplicación");
+    const ord = ["GARCH(1,1)", "GARCH(1,2)", "GARCH(2,1)", "GARCH(2,2)"];
+    const get = (m, d) => t2.find((r) => r.modelo === m && r.distribucion === d);
+    const hdr = (t) => ({ text: t, options: { bold: true, color: HEX.lt1, fill: { color: HEX.dk2 }, align: "center" } });
+    const rows = [[hdr("Modelo"), hdr("BIC normal"), hdr("BIC t-Student"), hdr("ln L t-Student")]];
+    ord.forEach((m) => {
+      const best = m === "GARCH(1,1)";
+      const o = best ? { bold: true, color: HEX.accent1 } : {};
+      rows.push([{ text: m, options: { ...o } }, { text: fmt(get(m, "Normal").BIC, 4), options: { align: "center" } },
+                 { text: fmt(get(m, "t-Student").BIC, 4), options: { align: "center", ...o } },
+                 { text: fmt(get(m, "t-Student").logverosimilitud, 2), options: { align: "center" } }]);
+    });
+    s.addTable(rows, { x: 0.6, y: 1.6, w: 7.4, colW: [1.9, 1.8, 1.9, 1.8], fontSize: 16, rowH: 0.62,
+      border: { type: "solid", pt: 0.5, color: "E5E7EB" }, color: HEX.dk1, fontFace: "Calibri", objectName: "tabla_seleccion" });
+    txt(s, "BIC por observación: menor es mejor.", { x: 0.6, y: 4.85, w: 7.4, h: 0.35, fontSize: 12, color: C.accent3 });
+    const ll_t = get("GARCH(1,1)", "t-Student").logverosimilitud, ll_n = get("GARCH(1,1)", "Normal").logverosimilitud;
+    stat(s, `+${fmt(ll_t - ll_n, 1)}`, "en ln L al pasar de normal a t, con un solo parámetro más (ν)", { x: 8.5, y: 1.6, w: 4.2, h: 1.9, color: C.accent1, fs: 36 });
+    stat(s, "< 0,2", "mejora de ln L al subir los órdenes: no compensa el parámetro extra", { x: 8.5, y: 3.75, w: 4.2, h: 1.9, fs: 36 });
+    txt(s, "Modelo elegido: media constante + GARCH(1,1) con innovaciones t de Student.", { x: 0.6, y: 5.6, w: 7.4, h: 0.8, fontSize: 18, bold: true, color: C.text2 });
+  }
+
+  // 11. Estimación
+  {
+    const s = nueva("Reacción moderada, memoria larga", "Aplicación");
+    const st = [
+      [fmt(a, 3), `α, reacción (EE ${fmt(t3.alpha1.ee_robusto, 3)})`, C.text2],
+      [fmt(b, 3), `β, memoria (EE ${fmt(t3.beta1.ee_robusto, 3)})`, C.text2],
+      [fmt(res.persistencia, 4), "α + β: persistencia", C.accent1],
+      [`${fmt(res.vida_media_dias, 0)} días`, "vida media de un choque", C.accent1],
+      [fmt(nu, 2), "ν: colas pesadas", C.text2],
+    ];
+    st.forEach(([v, l, col], i) => stat(s, v, l, { x: 0.6 + i * 2.48, y: 1.4, w: 2.3, h: 1.45, fs: 28, color: col }));
+    await img(s, FIG("f4_volatilidad_condicional.png"), { cx: 6.67, y: 3.05, h: 3.85, alt: "Volatilidad condicional estimada" });
+  }
+
+  // 12. Condiciones
+  {
+    const s = nueva("¿Cumple las condiciones teóricas?", "Aplicación");
+    const ok = (b) => ({ text: b ? "Sí" : "No", options: { bold: true, align: "center", color: b ? HEX.accent5 : HEX.accent1 } });
+    const hdr = (t) => ({ text: t, options: { bold: true, color: HEX.lt1, fill: { color: HEX.dk2 } } });
+    s.addTable([
+      [hdr("Condición"), hdr("Valor"), hdr("¿Se cumple?")],
+      ["Segundo orden: α + β < 1", { text: fmt(res.persistencia, 4), options: { align: "center" } }, ok(res.persistencia < 1)],
+      ["Estricta: E ln(β + αz²) < 0", { text: fmt(res.estricta_E_log, 3), options: { align: "center" } }, ok(res.estricta_E_log < 0)],
+      ["Cuarto momento < 1", { text: fmt(res.cuarto_momento, 3), options: { align: "center" } }, ok(res.cuarto_momento < 1)],
+    ], { x: 0.6, y: 1.5, w: 6.6, colW: [3.6, 1.4, 1.6], fontSize: 16, rowH: 0.62, color: HEX.dk1, fontFace: "Calibri",
+         border: { type: "solid", pt: 0.5, color: "E5E7EB" }, objectName: "tabla_condiciones" });
+    txt(s, "Sin cuarto momento finito, la curtosis teórica es infinita: coherente con la curtosis muestral de 17,3.",
+        { x: 0.6, y: 4.2, w: 6.6, h: 0.9, fontSize: 15 });
+    txt(s, [
+      { text: `IC 95 % de α + β: (${fmt(res.ic95_persistencia[0], 3)}; ${fmt(res.ic95_persistencia[1], 3)}). `, options: { bold: true, color: C.accent1 } },
+      { text: "Contiene a 1: no se rechaza un IGARCH. La estacionariedad estricta sí es robusta, porque se cumple incluso con α + β = 1." },
+    ], { x: 0.6, y: 5.15, w: 6.6, h: 1.4, fontSize: 15 });
+    card(s, { x: 7.6, y: 1.5, w: 5.1, h: 5.2 });
+    txt(s, "Una tensión: el nivel de largo plazo", { x: 7.9, y: 1.7, w: 4.6, h: 0.5, fontSize: 18, bold: true, color: C.text2 });
+    txt(s, "Con α + β tan cerca de 1, ω/(1 − α − β) amplifica el error de estimación.", { x: 7.9, y: 2.25, w: 4.6, h: 0.8, fontSize: 14 });
+    stat(s, `${fmt(res.vol_anual_incondicional, 1)} %`, "volatilidad anual implícita por el modelo", { x: 7.9, y: 3.1, w: 2.2, h: 1.5, fs: 26, color: C.accent1 });
+    stat(s, `${fmt(res.vol_anual_muestral, 1)} %`, "volatilidad anual de los datos", { x: 10.3, y: 3.1, w: 2.2, h: 1.5, fs: 26 });
+    txt(s, `Fijando el nivel en la varianza muestral (variance targeting): α + β = ${fmt(t4b[1].persistencia, 3)} y ln L cambia solo ${fmt(Number(t4b[0].logverosimilitud) - Number(t4b[1].logverosimilitud), 2)}. Los datos casi no distinguen ambos niveles.`,
+        { x: 7.9, y: 4.85, w: 4.6, h: 1.7, fontSize: 14 });
+  }
+
+  // 13. Diagnóstico
+  {
+    const s = nueva("Diagnóstico: la dinámica de la varianza queda capturada", "Aplicación");
+    await img(s, FIG("f5_diagnostico.png"), { x: 0.6, y: 1.45, w: 7.6, alt: "QQ y FAC de los residuales estandarizados al cuadrado" });
+    const hdr = (t) => ({ text: t, options: { bold: true, color: HEX.lt1, fill: { color: HEX.dk2 } } });
+    const nom = ["Ljung-Box Q(10), ẑ", "Ljung-Box Q(10), ẑ²", "ARCH-LM(12)", "Sesgo de signo"];
+    s.addTable([[hdr("Prueba"), hdr("p-valor")], ...t5.map((r, i) => [nom[i],
+      { text: pv(r.p_valor), options: { align: "center", bold: i === 3, color: i === 3 ? HEX.accent1 : HEX.dk1 } }])],
+      { x: 8.6, y: 1.5, w: 4.1, colW: [2.7, 1.4], fontSize: 15, rowH: 0.55, color: HEX.dk1, fontFace: "Calibri",
+        border: { type: "solid", pt: 0.5, color: "E5E7EB" }, objectName: "tabla_diagnostico" });
+    card(s, { x: 0.6, y: 5.0, w: 12.1, h: 1.75 });
+    txt(s, [
+      { text: "Sin autocorrelación ni efecto ARCH remanente ", options: { bold: true, color: C.text2 } },
+      { text: "→ la media constante y el GARCH(1,1) bastan.\n" },
+      { text: "Pero el signo importa ", options: { bold: true, color: C.accent1 } },
+      { text: "→ las caídas elevan más la volatilidad que las alzas (efecto apalancamiento), y el GARCH solo ve εₜ₋₁²." },
+    ], { x: 0.9, y: 5.15, w: 11.6, h: 1.45, fontSize: 16, valign: "middle", paraSpaceAfter: 6 });
+  }
+
+  // 14. Pronóstico
+  {
+    const s = nueva("Pronóstico de la volatilidad desde el 30/12/2025", "Aplicación");
+    await img(s, FIG("f6_pronostico.png"), { x: 0.6, y: 1.45, w: 8.4, alt: "Pronóstico de la volatilidad a 250 días" });
+    const h1 = t6[0], hN = t6[t6.length - 1];
+    stat(s, `${fmt(h1.sigma, 2)} %`, `σ de mañana (${fmt(h1.sigma_anual, 1)} % anual): mercado en calma`, { x: 9.3, y: 1.5, w: 3.4, h: 1.6, fs: 30 });
+    stat(s, `${fmt(hN.sigma, 2)} %`, "σ a 250 días, modelo libre", { x: 9.3, y: 3.3, w: 3.4, h: 1.6, fs: 30, color: C.accent1 });
+    stat(s, `${fmt(hN.sigma_vt, 2)} %`, "σ a 250 días, variance targeting", { x: 9.3, y: 5.1, w: 3.4, h: 1.6, fs: 30 });
+    txt(s, "Corto plazo: ambos coinciden. Largo plazo: depende del parámetro peor identificado.",
+        { x: 0.6, y: 5.45, w: 8.4, h: 0.8, fontSize: 16, bold: true, color: C.text2 });
+  }
+
+  // 15. VaR
+  {
+    const s = nueva("Un uso: el Valor en Riesgo diario", "Aplicación");
+    eq(s, "eq_var", { x: 0.6, y: 1.45, scale: 2.4 });
+    txt(s, "qₐ: cuantil de la t estandarizada. Evaluación fuera de muestra: 500 días (2024–2025), reestimando cada 25.",
+        { x: 5.3, y: 1.4, w: 7.4, h: 0.7, fontSize: 14, color: C.accent3, valign: "middle" });
+    await img(s, FIG("f7_var_backtesting.png"), { x: 0.6, y: 2.3, w: 7.9, alt: "VaR fuera de muestra y excedencias" });
+    const hdr = (t) => ({ text: t, options: { bold: true, color: HEX.lt1, fill: { color: HEX.dk2 }, align: "center" } });
+    s.addTable([[hdr("Nivel"), hdr("Esperadas"), hdr("Observadas"), hdr("p Kupiec")],
+      ...t7.map((r) => [{ text: r.nivel.replace("%", " %"), options: { align: "center" } }, { text: r.esperadas, options: { align: "center" } },
+        { text: r.observadas, options: { align: "center", bold: true } },
+        { text: fmt(r.kupiec_p, 3), options: { align: "center", bold: true, color: Number(r.kupiec_p) < 0.05 ? HEX.accent1 : HEX.accent5 } }])],
+      { x: 8.8, y: 2.4, w: 3.9, colW: [0.8, 1.05, 1.1, 0.95], fontSize: 13, rowH: 0.5, color: HEX.dk1, fontFace: "Calibri",
+        border: { type: "solid", pt: 0.5, color: "E5E7EB" }, objectName: "tabla_var" });
+    txt(s, [
+      { text: "1 %: ", options: { bold: true, color: C.accent5 } }, { text: "bien calibrado.\n" },
+      { text: "5 %: ", options: { bold: true, color: C.accent1 } },
+      { text: "subestima el riesgo; las fallas se reparten en el tiempo. La t simétrica no capta la asimetría negativa." },
+    ], { x: 8.8, y: 4.15, w: 3.9, h: 2.6, fontSize: 15, paraSpaceAfter: 6 });
+  }
+
+  // 16. App
+  {
+    const s = nueva("Para explorar: app interactiva en Shiny", "Aplicación");
+    await img(s, path.join(__dirname, "img/app_simulador.png"), { x: 0.6, y: 1.4, h: 5.4, alt: "Captura del simulador GARCH de la app", name: "captura_app" });
+    const x = 7.4, w = 5.3;
+    const tabs = [
+      ["Hechos estilizados", "FAC y pruebas para cualquier periodo."],
+      ["Simulador GARCH(1,1)", "Mover ω, α, β y ν y ver en vivo si se cumplen las condiciones."],
+      ["Estimación", "Otra muestra, orden o distribución, con diagnóstico."],
+      ["Pronóstico y VaR", "VaR de mañana en % y en dólares para un monto dado."],
+    ];
+    tabs.forEach(([h, d], i) => {
+      circulo(s, i + 1, x, 1.55 + i * 1.2, 0.5);
+      txt(s, h, { x: x + 0.7, y: 1.5 + i * 1.2, w: w - 0.7, h: 0.4, fontSize: 17, bold: true, color: C.text2 });
+      txt(s, d, { x: x + 0.7, y: 1.9 + i * 1.2, w: w - 0.7, h: 0.65, fontSize: 14 });
+    });
+    card(s, { x, y: 6.35, w, h: 0.5 });
+    txt(s, "Rscript R/03_ejecutar_app.R", { x: x + 0.2, y: 6.35, w: w - 0.4, h: 0.5, fontSize: 14, fontFace: "Courier New", valign: "middle", color: C.text2 });
+  }
+
+  // 17. Conclusiones
+  {
+    const s = nueva("Conclusiones", "Aplicación");
+    const cols = [
+      ["La teoría se confirma", C.text2, [
+        "Hechos estilizados presentes en el S&P 500",
+        "Tres parámetros bastan: GARCH(1,1) elimina el efecto ARCH",
+        "Estacionario estricto y de segundo orden; sin cuarto momento",
+      ]],
+      ["Ventajas", C.accent5, [
+        "Parsimonia e interpretación directa",
+        "Pronóstico en forma cerrada",
+        "Conecta de inmediato con el riesgo (VaR)",
+      ]],
+      ["Limitaciones", C.accent1, [
+        "Simétrico: ignora el signo del choque",
+        "Persistencia ≈ 1: largo plazo mal identificado",
+        "Extensiones: EGARCH, GJR, distribución asimétrica",
+      ]],
+    ];
+    cols.forEach(([h, col, items], i) => {
+      const x = 0.6 + i * 4.1, w = 3.9;
+      card(s, { x, y: 1.45, w, h: 4.1 });
+      txt(s, h, { x: x + 0.3, y: 1.65, w: w - 0.6, h: 0.5, fontSize: 20, bold: true, color: col });
+      txt(s, items.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < items.length - 1 } })),
+          { x: x + 0.3, y: 2.3, w: w - 0.6, h: 3.1, fontSize: 15, paraSpaceAfter: 10 });
+    });
+    txt(s, [
+      { text: "Posibilidad de uso: ", options: { bold: true, color: C.text2 } },
+      { text: "límites de pérdida y márgenes con el VaR, tamaño de posiciones con riesgo constante y volatilidad para valorar opciones." },
+    ], { x: 0.6, y: 5.85, w: 12.1, h: 0.9, fontSize: 17 });
+  }
+
+  // 18. Cierre
+  {
+    const s = pres.addSlide({ masterName: "PORTADA", sectionTitle: "Aplicación" });
+    txt(s, "Gracias", { x: 0.7, y: 1.4, w: 12, h: 1.1, fontSize: 54, bold: true, color: C.text2, fontFace: THEME.headFontFace });
+    txt(s, "Preguntas y comentarios", { x: 0.7, y: 2.5, w: 12, h: 0.6, fontSize: 24, color: C.accent3 });
+    txt(s, "Referencias principales", { x: 0.7, y: 3.75, w: 12, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+    const refs = [
+      "Bollerslev, T. (1986). Generalized autoregressive conditional heteroskedasticity. Journal of Econometrics, 31, 307–327.",
+      "Engle, R. F. (1982). Autoregressive conditional heteroscedasticity… Econometrica, 50, 987–1007.",
+      "Francq, C. y Zakoïan, J.-M. (2010). GARCH Models: Structure, Statistical Inference and Financial Applications. Wiley.",
+      "Nelson, D. B. (1990). Stationarity and persistence in the GARCH(1,1) model. Econometric Theory, 6, 318–334.",
+      "Rossi, E. (2013). GARCH Models. Notas de Financial Econometrics, Universidad de Pavía.",
+    ];
+    txt(s, refs.map((t, j) => ({ text: t, options: { breakLine: j < refs.length - 1 } })),
+        { x: 0.7, y: 4.25, w: 12, h: 2.4, fontSize: 13, color: C.text1, paraSpaceAfter: 6 });
+  }
+
+  const out = path.join(__dirname, "Presentacion_GARCH.pptx");
+  await pres.writeFile({ fileName: out });
+  await applyTheme(out, THEME);
+  console.log("OK", out);
+})();
